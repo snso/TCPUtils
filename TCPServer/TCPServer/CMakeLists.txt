@@ -1,0 +1,10 @@
+INCLUDE_DIRECTORIES(
+	.
+	./_Inc
+	./Inc
+)
+
+AUX_SOURCE_DIRECTORY(./Src SrcS)
+
+ADD_LIBRARY(YTCPServer STATIC ${SrcS})
+

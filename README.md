@@ -1,2 +1,13 @@
 # TCPUtils
-TCP服务端&amp;客户端
+支持跨平台的TCP程序
+
+TCPServer
+服务端代码
+
+
+TCPClient
+客户端代码
+
+Utils
+工具
+-时间
