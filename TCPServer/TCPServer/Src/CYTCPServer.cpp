@@ -27,11 +27,13 @@ CYTCPServer::CYTCPServer()
 	, m_bCreateRecv(false)
 {
 	m_vTCPClient.clear();
+	m_pRecvBuf = new char[RECV_DATA_LEN];
 }
 
 CYTCPServer::~CYTCPServer()
 {
 	Close();
+	delete[] m_pRecvBuf;
 }
 
 ///初始化socket
@@ -91,24 +93,41 @@ bool CYTCPServer::Init(const int port)
 
 bool CYTCPServer::Start(FunTCPServerRecv fRecv)
 {
+	//1、开始工作
 	m_bWork = true;
+	//2、赋值回调函数
 	m_fRecv = fRecv;
 
-	if(m_fRecv)
+	//3、注册回调函数，创建接受线程，如回调函数为null 将需要主动调用RecvData接口
+	if (!m_bCreateRecv)
 	{
-		if (!m_bCreateRecv)
-		{
-			std::thread tProcessThread(std::bind(&CYTCPServer::_OnMonitorLink, this));
-			tProcessThread.detach();
-			m_bCreateRecv = true;
-		}
-
-		//发送信号
+		//如果创建了连接线程将不再重复创建
+		std::thread tLinkThread(std::bind(&CYTCPServer::_OnMonitorLink, this));
+		tLinkThread.detach();
+		//首次进入直接进入runing 状态
+		m_eWorkStats = WORK_RUNING;
+		m_bCreateRecv = true;
+	}
+	else
+	{
+		//发送信号进行开始
 		while (WORK_RUNING != m_eWorkStats)
 		{
 			std::unique_lock<std::mutex> lock(m_mutexRecv);
 			m_cvRecv.notify_one();
 		}
+	}
+	
+
+	if(m_fRecv)
+	{
+		{
+			///3、连接线程
+			
+			
+		}
+
+		
 	}
 	return true;
 }
@@ -116,14 +135,17 @@ bool CYTCPServer::Start(FunTCPServerRecv fRecv)
 bool CYTCPServer::Stop()
 {
 	m_bWork = false;
-	while (WORK_WAITSINGAL != m_eWorkStats)
+	///如果调用了开始才等待结束
+	if(m_bCreateRecv)
 	{
-#ifdef _WIN32
-		Sleep(1);
-#else
-		usleep(1000);
-#endif // _WIN32
+		while (WORK_WAITSINGAL != m_eWorkStats)
+		{
+			std::chrono::milliseconds milTime(1);
+			std::this_thread::sleep_for(milTime);
+		}
+		m_fRecv = nullptr;
 	}
+	m_bCreateRecv = false;
 	return true;
 } 
 
@@ -234,11 +256,8 @@ bool CYTCPServer::Close()
 			std::unique_lock<std::mutex> lock(m_mutexRecv);
 			m_cvRecv.notify_one();
 
-#ifdef _WIN32
-			Sleep(1);
-#else
-			usleep(1000);
-#endif // _WIN32
+			std::chrono::milliseconds milTime(1);
+			std::this_thread::sleep_for(milTime);
 
 		}	
 	}
@@ -327,10 +346,10 @@ void CYTCPServer::_OnMonitorLink()
 
 				if (INVALID_SOCKET != nSocket)
 				{
-					printf("index : %d welcome [%d]: %s\n", m_vTCPClient.size(),(int)nSocket, inet_ntoa(sClientAddr.sin_addr));
+					printf("index : %zd welcome [%d]: %s\n", m_vTCPClient.size(),(int)nSocket, inet_ntoa(sClientAddr.sin_addr));
 					
 					TCPClient* pTCPClient = new TCPClient;
-					pTCPClient->m_nFD = nSocket;
+					pTCPClient->m_nFD = (int)nSocket;
 					std::unique_lock<std::mutex> lock(m_mVectorSocket);
 					m_vTCPClient.push_back(pTCPClient);
 				}
@@ -362,12 +381,11 @@ void CYTCPServer::_OnMonitorLink()
 bool CYTCPServer::_OnProcessData(TCPClient* sClient)
 {
 	const int nRecvLen = RECV_DATA_LEN;
-	char cBuf[nRecvLen] = {};
-	int nCount = recv(sClient->m_nFD, cBuf, nRecvLen, 0);
+	int nCount = recv(sClient->m_nFD, m_pRecvBuf, nRecvLen, 0);
 
 	if(nCount > 0 && m_fRecv)
 	{
-		m_fRecv(sClient, cBuf, nCount);
+		m_fRecv(sClient, m_pRecvBuf, nCount);
 	}
 	return nCount > 0;
 }

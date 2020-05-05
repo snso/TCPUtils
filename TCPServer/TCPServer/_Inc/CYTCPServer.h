@@ -4,7 +4,23 @@
 #include <mutex>
 #include <atomic>
 
-#define RECV_DATA_LEN 102400
+#ifdef _WIN32
+
+#define FD_SETSIZE 1024
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#include <WinSock2.h>
+#include <windows.h>
+
+#pragma comment(lib, "ws2_32.lib")
+
+#else
+#define SOCKET int
+#define INVALID_SOCKET  (SOCKET)(~0)
+#define SOCKET_ERROR            (-1)
+#endif
+
+#define RECV_DATA_LEN	1 * 1024 * 1024
+#define MAX_LINK_NUM	10000
 
 class CYTCPServer : public IYTCPServer
 {
@@ -63,11 +79,16 @@ private:
 	FunTCPServerRecv			m_fRecv;
 	bool						m_bCreateRecv;
 
+	char*						m_pRecvBuf;
+
 
 private:
+	///关闭客户端
 	void _CloseClient(const TCPClient* pClient);
 
+	///检测连接
 	void _OnMonitorLink();
 
+	///处理数据
 	bool _OnProcessData(TCPClient* sClient);
 };
