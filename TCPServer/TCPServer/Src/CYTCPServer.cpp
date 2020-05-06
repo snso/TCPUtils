@@ -126,8 +126,6 @@ bool CYTCPServer::Start(FunTCPServerRecv fRecv)
 			
 			
 		}
-
-		
 	}
 	return true;
 }

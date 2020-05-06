@@ -22,9 +22,11 @@
     <ClInclude Include="Inc\IYExport.h" />
     <ClInclude Include="Inc\IYNet_Errcode.h" />
     <ClInclude Include="Inc\IYTCPServer.h" />
+    <ClInclude Include="_Inc\CYServerTask.h" />
     <ClInclude Include="_Inc\CYTCPServer.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Src\CYServerTask.cpp" />
     <ClCompile Include="Src\CYTCPServer.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
