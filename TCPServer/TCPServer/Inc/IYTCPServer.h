@@ -2,6 +2,8 @@
 #include <functional>
 #include "IYExport.h"
 
+#define MAX_CLIENT_NUM 10000
+
 struct TCPClient
 {
 	int		m_nFD;

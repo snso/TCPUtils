@@ -81,8 +81,9 @@ int main()
 	std::thread ctrlThead(CmdThread);
 	ctrlThead.detach();
 
-	const int nEventNum = 10;
+	const int nEventNum = 10000;
 	const int nThreadNum = 5;
+
 	for (int i = 0; i < nThreadNum; i++)
 	{
 		std::thread runThread(ClientEvent, nEventNum / nThreadNum);

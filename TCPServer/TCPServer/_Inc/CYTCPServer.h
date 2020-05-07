@@ -44,8 +44,7 @@ private:
 private:
 
 	SOCKET						m_nSocket;
-	SOCKET						m_maxScoket;
-
+	
 	std::mutex					m_mVectorSocket;
 	std::vector<TCPClient*>		m_vTCPClient;
 	std::atomic<bool>			m_bWork;
@@ -56,16 +55,17 @@ private:
 	FunTCPServerRecv			m_fRecv;
 	bool						m_bCreateRecv;
 
-	char*						m_pRecvBuf;
-
+	///任务Task
+	std::mutex					m_mVectorTask;
+	std::vector<CYServerTask*>	m_vServerTask;
 
 private:
+
+	void _AddClient(const SOCKET nSocket, const sockaddr_in sClientAddr);
+
 	///关闭客户端
 	void _CloseClient(const TCPClient* pClient);
 
 	///检测连接
 	void _OnMonitorLink();
-
-	///处理数据
-	bool _OnProcessData(TCPClient* sClient);
 };

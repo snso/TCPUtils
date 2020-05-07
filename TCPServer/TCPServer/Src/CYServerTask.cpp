@@ -142,6 +142,14 @@ void CYServerTask::_OnProcessEvent()
 		}
 		else
 		{
+
+			if (m_vClient.empty())
+			{
+				std::chrono::milliseconds milTime(1);
+				std::this_thread::sleep_for(milTime);
+				continue;
+			}
+
 			
 			///¡Ÿ ±øÕªß∂Àvector
 			std::vector<TCPClient*>	vTCPClient;

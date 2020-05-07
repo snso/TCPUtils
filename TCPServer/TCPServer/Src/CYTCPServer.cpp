@@ -21,19 +21,16 @@
 CYTCPServer::CYTCPServer()
 	: m_eWorkStats(WORK_INIT)
 	, m_nSocket(INVALID_SOCKET)
-	, m_maxScoket(0)
 	, m_bWork(false)
 	, m_fRecv(nullptr)
 	, m_bCreateRecv(false)
 {
 	m_vTCPClient.clear();
-	m_pRecvBuf = new char[RECV_DATA_LEN];
 }
 
 CYTCPServer::~CYTCPServer()
 {
 	Close();
-	delete[] m_pRecvBuf;
 }
 
 ///初始化socket
@@ -107,6 +104,15 @@ bool CYTCPServer::Start(FunTCPServerRecv fRecv)
 		//首次进入直接进入runing 状态
 		m_eWorkStats = WORK_RUNING;
 		m_bCreateRecv = true;
+
+		///创建服务端Task
+		std::lock_guard<std::mutex> oLck(m_mVectorTask);
+		for (int i = floor(MAX_CLIENT_NUM / FD_SETSIZE); i >= 0; i--)
+		{
+			CYServerTask* pServerTask = new CYServerTask();
+			m_vServerTask.push_back(pServerTask);
+			pServerTask->StartTask(fRecv);
+		}
 	}
 	else
 	{
@@ -115,16 +121,6 @@ bool CYTCPServer::Start(FunTCPServerRecv fRecv)
 		{
 			std::unique_lock<std::mutex> lock(m_mutexRecv);
 			m_cvRecv.notify_one();
-		}
-	}
-	
-
-	if(m_fRecv)
-	{
-		{
-			///3、连接线程
-			
-			
 		}
 	}
 	return true;
@@ -142,6 +138,15 @@ bool CYTCPServer::Stop()
 			std::this_thread::sleep_for(milTime);
 		}
 		m_fRecv = nullptr;
+
+		///关闭服务端Task
+		std::lock_guard<std::mutex> oLck(m_mVectorTask);
+		std::vector<CYServerTask*>::iterator iter = m_vServerTask.begin();
+		while(iter != m_vServerTask.end())
+		{
+			(*iter)->StopTask();
+			iter = m_vServerTask.erase(iter);
+		}
 	}
 	m_bCreateRecv = false;
 	return true;
@@ -262,6 +267,32 @@ bool CYTCPServer::Close()
 	return true;
 }
 
+void CYTCPServer::_AddClient(const SOCKET nSocket, const sockaddr_in sClientAddr)
+{
+	printf("index : %d welcome [%d]: %s\n", m_vTCPClient.size(), (int)nSocket, inet_ntoa(sClientAddr.sin_addr));
+	TCPClient* pTCPClient = new TCPClient;
+	pTCPClient->m_nFD = (int)nSocket;
+	{
+		std::unique_lock<std::mutex> lock(m_mVectorSocket);
+		m_vTCPClient.push_back(pTCPClient);
+	}
+	{
+		std::lock_guard<std::mutex> taskLock(m_mVectorTask);
+		std::vector<CYServerTask*>::iterator iterMin = m_vServerTask.begin();
+		std::vector<CYServerTask*>::iterator iter = m_vServerTask.begin();
+		while (iter != m_vServerTask.end())
+		{
+			iterMin = (*iterMin)->GetClientNum() <= (*iter)->GetClientNum() ? iterMin : iter;
+			iter++;
+		}
+
+		if (iterMin != m_vServerTask.end())
+		{
+			(*iterMin)->AddClient(pTCPClient);
+		}
+	}
+}
+
 void CYTCPServer::_CloseClient(const TCPClient* pClient)
 {
 	std::unique_lock<std::mutex> lock(m_mVectorSocket);
@@ -283,7 +314,6 @@ void CYTCPServer::_CloseClient(const TCPClient* pClient)
 
 void CYTCPServer::_OnMonitorLink()
 {
-	m_maxScoket = m_nSocket;
 	//select
 	fd_set	fdRead;
 	fd_set	fdExp;
@@ -312,23 +342,8 @@ void CYTCPServer::_OnMonitorLink()
 			FD_SET(m_nSocket, &fdRead);
 			FD_SET(m_nSocket, &fdExp);
 
-			///临时客户端vector
-			std::vector<TCPClient*>	vTCPClient;
-			{
-				std::unique_lock<std::mutex> lock(m_mVectorSocket);
-				vTCPClient = m_vTCPClient;
-			}
-
-			m_maxScoket = m_nSocket;
-			for (int i = (int)vTCPClient.size() - 1; i >= 0; i--)
-			{
-				FD_SET(vTCPClient[i]->m_nFD, &fdRead);
-				FD_SET(vTCPClient[i]->m_nFD, &fdExp);
-				m_maxScoket = vTCPClient[i]->m_nFD > m_maxScoket ? vTCPClient[i]->m_nFD : m_maxScoket;
-			}
-
-			struct timeval sWaitTime = {1, 0};
-			int nCount = select((int)m_maxScoket + 1, &fdRead, nullptr, &fdExp, &sWaitTime);
+			struct timeval sWaitTime = {0, 1000};
+			int nCount = select((int)m_nSocket + 1, &fdRead, nullptr, &fdExp, &sWaitTime);
 
 			if (nCount <= 0)
 			{
@@ -344,48 +359,14 @@ void CYTCPServer::_OnMonitorLink()
 
 				if (INVALID_SOCKET != nSocket)
 				{
-					printf("index : %zd welcome [%d]: %s\n", m_vTCPClient.size(),(int)nSocket, inet_ntoa(sClientAddr.sin_addr));
+					_AddClient(nSocket, sClientAddr);
 					
-					TCPClient* pTCPClient = new TCPClient;
-					pTCPClient->m_nFD = (int)nSocket;
-					std::unique_lock<std::mutex> lock(m_mVectorSocket);
-					m_vTCPClient.push_back(pTCPClient);
-				}
-				continue;
-			}
-
-			{
-				vTCPClient.clear();
-				std::unique_lock<std::mutex> lock(m_mVectorSocket);
-				vTCPClient = m_vTCPClient;
-			}
-
-			for (int i = (int)vTCPClient.size() - 1; i >= 0; i--)
-			{
-				if (FD_ISSET(vTCPClient[i]->m_nFD, &fdRead))
-				{
-					//接受并回调
-					if (!_OnProcessData(vTCPClient[i]))
-					{
-						_CloseClient(vTCPClient[i]);
-					}
 				}
 			}
+
 		}
 	}
 	m_eWorkStats = WORK_EXIT;
-}
-
-bool CYTCPServer::_OnProcessData(TCPClient* sClient)
-{
-	const int nRecvLen = RECV_DATA_LEN;
-	int nCount = recv(sClient->m_nFD, m_pRecvBuf, nRecvLen, 0);
-
-	if(nCount > 0 && m_fRecv)
-	{
-		m_fRecv(sClient, m_pRecvBuf, nCount);
-	}
-	return nCount > 0;
 }
 
 bool CreatYTCPServer(IYTCPServer** ppIYTCPServer)
