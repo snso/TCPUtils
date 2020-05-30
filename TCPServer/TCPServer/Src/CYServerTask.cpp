@@ -142,7 +142,6 @@ void CYServerTask::_OnProcessEvent()
 		}
 		else
 		{
-
 			if (m_vClient.empty())
 			{
 				std::chrono::milliseconds milTime(1);

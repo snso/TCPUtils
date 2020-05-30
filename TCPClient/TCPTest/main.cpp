@@ -81,8 +81,8 @@ int main()
 	std::thread ctrlThead(CmdThread);
 	ctrlThead.detach();
 
-	const int nEventNum = 10000;
-	const int nThreadNum = 5;
+	const int nEventNum = 1000;
+	const int nThreadNum = 2;
 
 	for (int i = 0; i < nThreadNum; i++)
 	{

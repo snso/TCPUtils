@@ -107,7 +107,7 @@ bool CYTCPServer::Start(FunTCPServerRecv fRecv)
 
 		///创建服务端Task
 		std::lock_guard<std::mutex> oLck(m_mVectorTask);
-		for (int i = floor(MAX_CLIENT_NUM / FD_SETSIZE); i >= 0; i--)
+		for (int i = (int)floor(MAX_CLIENT_NUM / FD_SETSIZE); i >= 0; i--)
 		{
 			CYServerTask* pServerTask = new CYServerTask();
 			m_vServerTask.push_back(pServerTask);
@@ -269,7 +269,7 @@ bool CYTCPServer::Close()
 
 void CYTCPServer::_AddClient(const SOCKET nSocket, const sockaddr_in sClientAddr)
 {
-	printf("index : %d welcome [%d]: %s\n", m_vTCPClient.size(), (int)nSocket, inet_ntoa(sClientAddr.sin_addr));
+	printf("index : %d welcome [%d]: %s\n", (int)m_vTCPClient.size(), (int)nSocket, inet_ntoa(sClientAddr.sin_addr));
 	TCPClient* pTCPClient = new TCPClient;
 	pTCPClient->m_nFD = (int)nSocket;
 	{
